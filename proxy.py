@@ -51,7 +51,6 @@ async def get_gemini_response(user_id: int, user_message: str) -> str:
     history = [system_msg] + other_msgs
     session["history"] = history
 
-    # Hàm gọi API đồng bộ để chạy trong thread riêng
     def call_gemini_sync():
         payload = {
             "model": GEMINI_MODEL,
@@ -59,12 +58,14 @@ async def get_gemini_response(user_id: int, user_message: str) -> str:
             "max_tokens": 512,
             "temperature": 0.7,
         }
+        
+        # ==== SỬA Ở ĐÂY: Gửi cả 2 header ====
         headers = {
+            "Authorization": f"Bearer {GEMINI_API_KEY}",
             "x-goog-api-key": GEMINI_API_KEY,
             "Content-Type": "application/json"
         }
         
-        # Dùng httpx để gửi request, đảm bảo header chuẩn
         response = httpx.post(GEMINI_URL, headers=headers, json=payload, timeout=60)
         
         if response.status_code != 200:
@@ -74,7 +75,6 @@ async def get_gemini_response(user_id: int, user_message: str) -> str:
         return data['choices'][0]['message']['content']
 
     try:
-        # Chạy request ở thread riêng để không chặn bot
         loop = asyncio.get_event_loop()
         assistant_reply = await loop.run_in_executor(None, call_gemini_sync)
 
