@@ -6,10 +6,10 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 
 # ================== CẤU HÌNH ==================
 BOT_TOKEN = "8983631020:AAHitwdCI9SyIeTqR2Ukr50Ng_V84JmcE7U"
-GEMINI_API_KEY = "AQ.Ab8RN6KNuFi0fhJuzi3QFZriNmADNgibTyYvUC6qZ6U-1K7lug"
-GEMINI_MODEL = "gemini-3.6-flash" # Model mới nhất
+GEMINI_API_KEY = "AQ.Ab8RN6KNuFi0fhJuzi3QFZriNmADNgibTyYvUC6qZ6U-1K7lug" 
+GEMINI_MODEL = "gemini-3.6-flash"
 
-# Endpoint gốc (Native) của Google, hỗ trợ key AQ. chuẩn nhất
+# Endpoint gốc của Google - chỉ dùng Header x-goog-api-key
 GEMINI_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
 
 SYSTEM_PROMPT = (
@@ -21,7 +21,6 @@ SYSTEM_PROMPT = (
 
 user_sessions = {}
 
-# Ẩn log rườm rà
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
@@ -41,9 +40,9 @@ def get_or_create_session(user_id: int):
         }
     return user_sessions[user_id]
 
-# Hàm gọi API Google (đồng bộ, chạy trong thread riêng)
+# Hàm gọi API (Đồng bộ, chạy trong thread riêng)
 def call_gemini_sync(history):
-    # Google yêu cầu cấu trúc JSON riêng (khác OpenAI):
+    # Google Native API yêu cầu cấu trúc JSON riêng, không giống OpenAI
     contents = []
     for msg in history:
         role = "model" if msg["role"] == "assistant" else "user"
@@ -60,7 +59,7 @@ def call_gemini_sync(history):
         }
     }
     
-    # Bắt buộc gửi qua header x-goog-api-key
+    # QUAN TRỌNG: Chỉ dùng x-goog-api-key, TUYỆT ĐỐI KHÔNG thêm Authorization
     headers = {
         "x-goog-api-key": GEMINI_API_KEY,
         "Content-Type": "application/json"
@@ -72,7 +71,6 @@ def call_gemini_sync(history):
         raise Exception(f"HTTP {response.status_code}: {response.text}")
     
     data = response.json()
-    # Lấy nội dung phản hồi
     return data['candidates'][0]['content']['parts'][0]['text']
 
 async def get_gemini_response(user_id: int, user_message: str) -> str:
@@ -89,7 +87,6 @@ async def get_gemini_response(user_id: int, user_message: str) -> str:
     session["history"] = history
 
     try:
-        # Chạy API ở thread riêng để không chặn bot
         loop = asyncio.get_event_loop()
         assistant_reply = await loop.run_in_executor(None, call_gemini_sync, history)
 
