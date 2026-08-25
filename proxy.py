@@ -1,14 +1,13 @@
 import asyncio
 import logging
-import os
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from openai import OpenAI
 
-# ================== CẤU HÌNH (ĐÃ NHÚNG CỨNG) ==================
+# ================== CẤU HÌNH ==================
 BOT_TOKEN = "8983631020:AAHitwdCI9SyIeTqR2Ukr50Ng_V84JmcE7U"
 GEMINI_API_KEY = "AQ.Ab8RN6KNuFi0fhJuzi3QFZriNmADNgibTyYvUC6qZ6U-1K7lug"
-GEMINI_MODEL = "gemini-3.6-flash" # Model đang chạy ổn định
+GEMINI_MODEL = "gemini-3.6-flash"
 
 SYSTEM_PROMPT = (
     "Bạn là một trợ lý AI thông minh, thân thiện và hài hước. "
@@ -17,14 +16,15 @@ SYSTEM_PROMPT = (
     "không lan man. Nếu không biết câu trả lời, hãy thành thật nói không biết."
 )
 
+# SỬA LẠI Ở ĐÂY: Dùng default_headers
 client = OpenAI(
-    api_key=GEMINI_API_KEY,
-    base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
+    api_key="dummy_key",
+    base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+    default_headers={"x-goog-api-key": GEMINI_API_KEY}
 )
 
 user_sessions = {}
 
-# ================== Ẩn log rườm rà ==================
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
@@ -36,7 +36,6 @@ logger = logging.getLogger(__name__)
 
 MAX_HISTORY = 5 
 
-# ================== HÀM KHỞI TẠO SESSION ==================
 def get_or_create_session(user_id: int):
     if user_id not in user_sessions:
         user_sessions[user_id] = {
@@ -45,7 +44,6 @@ def get_or_create_session(user_id: int):
         }
     return user_sessions[user_id]
 
-# ================== HÀM GỌI GEMINI ==================
 async def get_gemini_response(user_id: int, user_message: str) -> str:
     session = get_or_create_session(user_id)
     history = session["history"]
@@ -80,7 +78,6 @@ async def get_gemini_response(user_id: int, user_message: str) -> str:
         logger.error(f"Lỗi Gemini API: {e}")
         return "⚠️ API gặp sự cố. Vui lòng thử lại sau."
 
-# ================== CÁC LỆNH TELEGRAM ==================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🤖 Chào bạn! Bot đã sẵn sàng.\n\n"
@@ -114,7 +111,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_message = update.message.text
     reply_to = update.message.reply_to_message
 
-    # Không reply bot -> Im lặng
     if reply_to is None or reply_to.from_user.id != context.bot.id:
         return
 
@@ -126,7 +122,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply = await get_gemini_response(user_id, user_message)
     await update.message.reply_text(reply)
 
-# ================== CHẠY BOT ==================
 def main():
     app = Application.builder().token(BOT_TOKEN).build()
     
