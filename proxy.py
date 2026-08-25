@@ -1,26 +1,20 @@
 import asyncio
 import logging
+import httpx
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
-from openai import OpenAI
 
 # ================== CẤU HÌNH ==================
 BOT_TOKEN = "8983631020:AAHitwdCI9SyIeTqR2Ukr50Ng_V84JmcE7U"
 GEMINI_API_KEY = "AQ.Ab8RN6KNuFi0fhJuzi3QFZriNmADNgibTyYvUC6qZ6U-1K7lug"
 GEMINI_MODEL = "gemini-3.6-flash"
+GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
 
 SYSTEM_PROMPT = (
     "Bạn là một trợ lý AI thông minh, thân thiện và hài hước. "
     "Hãy trả lời câu hỏi của người dùng một cách tự nhiên, dễ hiểu, "
     "với giọng điệu vui vẻ, tích cực. Trả lời ngắn gọn nhưng đầy đủ ý, "
     "không lan man. Nếu không biết câu trả lời, hãy thành thật nói không biết."
-)
-
-# SỬA LẠI Ở ĐÂY: Dùng default_headers
-client = OpenAI(
-    api_key="dummy_key",
-    base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
-    default_headers={"x-goog-api-key": GEMINI_API_KEY}
 )
 
 user_sessions = {}
@@ -34,7 +28,7 @@ logging.getLogger("telegram").setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)
 
-MAX_HISTORY = 5 
+MAX_HISTORY = 5
 
 def get_or_create_session(user_id: int):
     if user_id not in user_sessions:
@@ -57,20 +51,33 @@ async def get_gemini_response(user_id: int, user_message: str) -> str:
     history = [system_msg] + other_msgs
     session["history"] = history
 
-    try:
-        loop = asyncio.get_event_loop()
-        response = await loop.run_in_executor(
-            None, 
-            lambda: client.chat.completions.create(
-                model=GEMINI_MODEL,
-                messages=history,
-                stream=False,
-                max_tokens=512,
-                temperature=0.7,
-            )
-        )
+    # Hàm gọi API đồng bộ để chạy trong thread riêng
+    def call_gemini_sync():
+        payload = {
+            "model": GEMINI_MODEL,
+            "messages": history,
+            "max_tokens": 512,
+            "temperature": 0.7,
+        }
+        headers = {
+            "x-goog-api-key": GEMINI_API_KEY,
+            "Content-Type": "application/json"
+        }
         
-        assistant_reply = response.choices[0].message.content
+        # Dùng httpx để gửi request, đảm bảo header chuẩn
+        response = httpx.post(GEMINI_URL, headers=headers, json=payload, timeout=60)
+        
+        if response.status_code != 200:
+            raise Exception(f"HTTP {response.status_code}: {response.text}")
+        
+        data = response.json()
+        return data['choices'][0]['message']['content']
+
+    try:
+        # Chạy request ở thread riêng để không chặn bot
+        loop = asyncio.get_event_loop()
+        assistant_reply = await loop.run_in_executor(None, call_gemini_sync)
+
         history.append({"role": "assistant", "content": assistant_reply})
         session["history"] = history
         return assistant_reply
